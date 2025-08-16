@@ -1,0 +1,220 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Threat Actor Dashboard</title>
+
+    <link rel="stylesheet" href="{% static 'bootstrap/css/bootstrap.css' %}">
+
+
+    <script src="{% static 'jquery/jquery-3.7.1.min.js' %}"></script>
+    <script src="{% static 'Charts/proj4.js' %}"></script>
+    <script src="{% static 'Charts/highmaps.js' %}"></script>
+    <script src="{% static 'Charts/exporting.js' %}"></script>
+    <script src="{% static 'Charts/world.js' %}"></script>
+    <script src="{% static 'Charts/accessibility.js' %}"></script>
+
+
+    <!-- <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+    <script src="https://code.highcharts.com/maps/highmaps.js"></script>
+    <script src="https://code.highcharts.com/maps/modules/exporting.js"></script>
+    <script src="https://code.highcharts.com/mapdata/custom/world.js"></script>
+    <script src="https://code.highcharts.com/modules/accessibility.js"></script> -->
+
+
+    <!-- 
+    <script src="https://code.highcharts.com/maps/modules/drilldown.js"></script>
+    <script src="https://code.highcharts.com/mapdata/index.js"></script>
+    <script src="https://code.highcharts.com/themes/adaptive.js"></script> -->
+
+
+    <style>
+        body {
+            overflow: hidden;
+        }
+
+        .left-pane {
+            width: 20%;
+            height: 100vh;
+            overflow-y: auto;
+            border-right: 1px solid #ddd;
+        }
+
+        .right-pane {
+            width: 80%;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .actor-item {
+            cursor: pointer;
+            padding: 8px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .actor-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .map-container {
+            height: 60vh;
+        }
+
+        .details-container {
+            height: 40vh;
+            overflow-y: auto;
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="d-flex">
+        <!-- Left Panel -->
+        <div class="left-pane p-2">
+            <input type="text" id="searchActor" class="form-control mb-2" placeholder="Search Actor...">
+            <div id="actorList">
+                {% for actor in actors %}
+                <div class="actor-item" data-id="{{ actor.id }}" data-url="{% url 'get_actor_details' actor.id %}">
+                    {{ actor.name }}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="right-pane">
+            <!-- Map -->
+            <div id="mapContainer" class="map-container"></div>
+            <!-- Details -->
+            <div class="details-container">
+                <h4 id="actorName">Select a Threat Actor</h4>
+                <p><strong>Country:</strong> <span id="actorCountry"></span></p>
+                <p><strong>Aliases:</strong> <span id="actorAlias"></span></p>
+                <p><strong>Description:</strong></p>
+                <p id="actorDescription"></p>
+                <p><strong>References:</strong></p>
+                <ul id="actorReferences"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let mapChart;
+
+        function initMap(sourceCountry, victimCountries) {
+            const countryData = [];
+
+            if (sourceCountry) {
+                countryData.push({ 'hc-key': sourceCountry.toLowerCase(), value: 2 });
+            }
+            if (victimCountries && victimCountries.length > 0) {
+                victimCountries.forEach(c => {
+                    countryData.push({ 'hc-key': c.toLowerCase(), value: 1 });
+                });
+            }
+
+            mapChart = Highcharts.mapChart('mapContainer', {
+                chart: {
+                    map: 'custom/world'
+                },
+                title: {
+                    text: 'Threat Actor Activity Map'
+                },
+                colorAxis: {
+                    dataClasses: [
+                        { from: 1, to: 1, color: '#ff6666', name: 'Target' },
+                        { from: 2, to: 2, color: '#66b3ff', name: 'Source' }
+                    ]
+                },
+                series: [{
+                    data: countryData,
+                    joinBy: 'hc-key',
+                    name: 'Country',
+                    states: {
+                        hover: {
+                            color: '#a4edba'
+                        }
+                    }
+                }]
+            });
+        }
+        $(document).ready(function () {
+            // Initial empty map
+            initMap(null, []);
+
+            // Search filter
+            // $("#searchActor").on("keyup", function () {
+            //     const value = $(this).val().toLowerCase();
+            //     $("#actorList .actor-item").filter(function () {
+            //         $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1);
+            //     });
+            // });
+
+
+            $("#searchActor").on("keyup", function () {
+                const value = $(this).val();
+                if (value.length > 3) {
+                    $.ajax({
+                        url: "{% url 'search_actor_ajax' %}",
+                        data: { q: value },
+                        success: function (data) {
+                            $("#actorList").empty();
+                            data.forEach(actor => {
+
+                                let synonymText = "";
+                                if (actor.synonyms && actor.synonyms.length > 0) {
+                                    synonymText = ` <span class="text-muted">(${actor.synonyms.join(", ")})</span>`;
+                                }
+
+                                $("#actorList").append(
+                                    `<div class="actor-item" data-url="${actor.url}">${actor.name}${synonymText}</div>`
+                                );
+
+                            });
+                        }
+                    });
+                }
+            });
+
+
+
+
+
+            // Click event for actor list
+            $(document).on("click", ".actor-item", function () {
+                const actorId = $(this).data("url");
+                // AJAX call to Django view 
+                $.ajax({
+                    url: actorId, // your Django URL
+                    method: "GET",
+                    success: function (data) {
+                        $("#actorName").text(data.name);
+                        $("#actorCountry").text(data.suspected_state_sponsor || "Unknown");
+                        $("#actorAlias").text(data.synonyms || "None");
+                        $("#actorDescription").text(data.description || "No description available.");
+
+                        const refList = $("#actorReferences").empty();
+                        if (data.references && data.references.length > 0) {
+                            data.references.forEach(ref => {
+                                refList.append(`<li><a href="${ref}" target="_blank">${ref}</a></li>`);
+                            });
+                        }
+                        // Update map
+                        initMap(data.country, data.victims);
+                    },
+                    error: function (xhr) {
+                        console.error("Error fetching actor details:", xhr);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>
