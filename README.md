@@ -8,3 +8,7 @@ Download threat-actor.json from MISP-Galaxy/Cluster
 ```python
 python3 manage.py import_threat_actors threat-actor.json
 ```
+
+## 🎥 Demo
+
+<video src="assets/demo.mp4" controls autoplay muted loop width="600"></video>
